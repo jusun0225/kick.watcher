@@ -1,0 +1,43 @@
+name: KICPA Watcher (ntfy)
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # 10분마다
+  workflow_dispatch: {}       # 수동 실행도 가능
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run watcher (ntfy push)
+        env:
+          NTFY_URL:  ${{ secrets.NTFY_URL }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          STATE_FILE: .state/kicpa_state.json
+          MAX_ITEMS: "60"
+        run: |
+          mkdir -p .state
+          python watch_kicpa_jobs.py
+
+      - name: Persist state
+        run: |
+          if [ -n "$(git status --porcelain .state/kicpa_state.json || true)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .state/kicpa_state.json
+            git commit -m "chore: update watcher state [skip ci]"
+            git push
+          else
+            echo "No state change."
+          fi
